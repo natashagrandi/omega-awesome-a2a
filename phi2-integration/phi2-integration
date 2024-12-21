@@ -1,0 +1,124 @@
+📁 /
+│
+├── models/
+│   └── phi2.py
+│
+├── routes/
+│   └── phi2_routes.py
+│
+├── templates/
+│   └── phi2.html
+│
+├── static/
+│   └── js/
+│       └── phi2.js
+│
+├── tests/
+│   └── test_phi2.py
+│
+├── config/
+│   └── phi2_config.yaml
+│
+├── requirements.txt
+└── README.md
+models/phi2.py:
+python
+Copy
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+class Phi2Interface:
+    def __init__(self):
+        self.model_name = "microsoft/phi-2"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model = None
+        self.tokenizer = None
+        self.max_length = 512
+        
+    def initialize(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
+        
+    def generate(self, prompt: str, max_new_tokens: int = None):
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens or self.max_length,
+            temperature=0.7,
+            top_p=0.9
+        )
+        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+routes/phi2_routes.py:
+python
+Copy
+from flask import Blueprint, request, jsonify
+from models.phi2 import Phi2Interface
+
+phi2_routes = Blueprint('phi2', __name__)
+phi2_model = Phi2Interface()
+
+@phi2_routes.route('/api/phi2/generate', methods=['POST'])
+def generate():
+    data = request.get_json()
+    prompt = data.get('prompt')
+    max_tokens = data.get('max_tokens', 512)
+    
+    response = phi2_model.generate(prompt, max_new_tokens=max_tokens)
+    return jsonify({'response': response})
+templates/phi2.html:
+html
+Copy
+<div class="model-section" id="phi2-section">
+    <h3>Phi-2 Model</h3>
+    <div class="input-container">
+        <textarea id="phi2-prompt" placeholder="Enter your prompt..."></textarea>
+        <button onclick="generatePhi2()" class="generate-btn">Generate</button>
+    </div>
+    <div id="phi2-response" class="response-box"></div>
+</div>
+static/js/phi2.js:
+javascript
+Copy
+function generatePhi2() {
+    const prompt = document.getElementById('phi2-prompt').value;
+    const responseDiv = document.getElementById('phi2-response');
+    
+    responseDiv.innerHTML = 'Generating...';
+    
+    fetch('/api/phi2/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt })
+    })
+    .then(response => response.json())
+    .then(data => {
+        responseDiv.innerHTML = data.response;
+    })
+    .catch(error => {
+        responseDiv.innerHTML = 'Error: ' + error.message;
+    });
+}
+config/phi2_config.yaml:
+yaml
+Copy
+model:
+  name: "microsoft/phi-2"
+  max_length: 512
+  temperature: 0.7
+  top_p: 0.9
+  device: "auto"
+
+api:
+  batch_size: 1
+  timeout: 30
+  max_tokens: 512
+requirements.txt:
+unknown
+Copy
+transformers>=4.34.0
+torch>=2.0.0
+flask>=2.0.0
